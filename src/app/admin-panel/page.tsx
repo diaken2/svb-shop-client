@@ -215,17 +215,40 @@ export default function AdminPanelPage() {
 }
 
 function ProductForm({ initial, onClose, onSaved }: { initial?: Product | null, onClose: () => void, onSaved: (p: Product) => void }) {
-  const [form, setForm] = useState<Product>(() => initial ? { ...initial } : {
-    id: '', name: '', price: 0, image: '', additionalImages: [], specs: [], type: 'regular', description: '', shortDesc: '', meta: {}
+  const [form, setForm] = useState<Product>(() => initial ? { 
+    ...initial,
+    meta: initial.meta || { title: '', description: '', keywords: [], ogImage: '' }
+  } : {
+    id: '', name: '', price: 0, image: '', additionalImages: [], specs: [], 
+    type: 'regular', description: '', shortDesc: '', 
+    meta: { title: '', description: '', keywords: [], ogImage: '' }
   });
+  
   const [saving, setSaving] = useState(false);
   const [uploading, setUploading] = useState<string | null>(null);
+  const [activeMetaTab, setActiveMetaTab] = useState<'basic' | 'meta'>('basic');
 
-  useEffect(() => { if (initial) setForm({ ...initial }); }, [initial]);
+  useEffect(() => { 
+    if (initial) {
+      setForm({ 
+        ...initial,
+        meta: initial.meta || { title: '', description: '', keywords: [], ogImage: '' }
+      }); 
+    }
+  }, [initial]);
 
-  function setField<K extends keyof Product>(k: K, v: Product[K]) { setForm(prev => ({ ...prev, [k]: v })); }
+  function setField<K extends keyof Product>(k: K, v: Product[K]) { 
+    setForm(prev => ({ ...prev, [k]: v })); 
+  }
 
-  async function uploadImageToImgbb(file: File, field: 'image' | 'additionalImages', index?: number): Promise<string> {
+  function setMetaField<K extends keyof Product['meta']>(k: K, v: Product['meta'][K]) {
+    setForm(prev => ({ 
+      ...prev, 
+      meta: { ...prev.meta, [k]: v } 
+    })); 
+  }
+
+  async function uploadImageToImgbb(file: File): Promise<string> {
     const formData = new FormData();
     formData.append('image', file);
     
@@ -254,13 +277,29 @@ function ProductForm({ initial, onClose, onSaved }: { initial?: Product | null, 
 
     setUploading('main');
     try {
-      const imageUrl = await uploadImageToImgbb(file, 'image');
+      const imageUrl = await uploadImageToImgbb(file);
       setField('image', imageUrl);
     } catch (error: any) {
       alert(error.message || 'Ошибка загрузки изображения');
     } finally {
       setUploading(null);
-      e.target.value = ''; // Сброс input
+      e.target.value = '';
+    }
+  }
+
+  async function handleOgImageUpload(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    setUploading('ogImage');
+    try {
+      const imageUrl = await uploadImageToImgbb(file);
+      setMetaField('ogImage', imageUrl);
+    } catch (error: any) {
+      alert(error.message || 'Ошибка загрузки изображения');
+    } finally {
+      setUploading(null);
+      e.target.value = '';
     }
   }
 
@@ -271,7 +310,7 @@ function ProductForm({ initial, onClose, onSaved }: { initial?: Product | null, 
     setUploading('additional');
     try {
       const uploadedUrls = await Promise.all(
-        files.map(file => uploadImageToImgbb(file, 'additionalImages'))
+        files.map(file => uploadImageToImgbb(file))
       );
       
       setField('additionalImages', [...(form.additionalImages || []), ...uploadedUrls]);
@@ -279,7 +318,7 @@ function ProductForm({ initial, onClose, onSaved }: { initial?: Product | null, 
       alert(error.message || 'Ошибка загрузки изображений');
     } finally {
       setUploading(null);
-      e.target.value = ''; // Сброс input
+      e.target.value = '';
     }
   }
 
@@ -289,18 +328,25 @@ function ProductForm({ initial, onClose, onSaved }: { initial?: Product | null, 
     setField('additionalImages', newImages);
   }
 
-  // ФИКС: Правильная обработка характеристик
-  function handleSpecsChange(e: React.ChangeEvent<HTMLTextAreaElement>) {
-    const value = e.target.value;
-    // Сохраняем текст как есть, а разбиваем на массив только при сохранении
-    setField('specs', [value]); // Временно храним как массив с одним элементом
-  }
-
-  // ФИКС: Правильное получение текста для textarea
   function getSpecsText(): string {
     if (!form.specs || form.specs.length === 0) return '';
-    // Если specs хранится как массив строк, объединяем их через перенос строки
     return Array.isArray(form.specs) ? form.specs.join('\n') : '';
+  }
+
+  function handleSpecsChange(e: React.ChangeEvent<HTMLTextAreaElement>) {
+    const value = e.target.value;
+    setField('specs', [value]);
+  }
+
+  function getKeywordsText(): string {
+    if (!form.meta?.keywords || form.meta.keywords.length === 0) return '';
+    return Array.isArray(form.meta.keywords) ? form.meta.keywords.join(', ') : '';
+  }
+
+  function handleKeywordsChange(e: React.ChangeEvent<HTMLTextAreaElement>) {
+    const value = e.target.value;
+    const keywordsArray = value.split(',').map(k => k.trim()).filter(Boolean);
+    setMetaField('keywords', keywordsArray);
   }
 
   async function save() {
@@ -310,7 +356,7 @@ function ProductForm({ initial, onClose, onSaved }: { initial?: Product | null, 
 
       const payload = { ...form };
       
-      // ФИКС: Правильно разбиваем характеристики на массив
+      // Обработка характеристик
       if (typeof payload.specs?.[0] === 'string') {
         payload.specs = payload.specs[0]
           .split('\n')
@@ -321,6 +367,12 @@ function ProductForm({ initial, onClose, onSaved }: { initial?: Product | null, 
       }
       
       payload.additionalImages = payload.additionalImages || [];
+      
+      // Обеспечиваем правильную структуру meta
+      payload.meta = payload.meta || {};
+      payload.meta.keywords = Array.isArray(payload.meta.keywords) ? 
+        payload.meta.keywords : 
+        (payload.meta.keywords ? [payload.meta.keywords] : []);
 
       let res;
       if (initial && initial.id) {
@@ -350,7 +402,7 @@ function ProductForm({ initial, onClose, onSaved }: { initial?: Product | null, 
 
   return (
     <div className="fixed inset-0 bg-black/50 flex items-center justify-center p-4 z-50 overflow-y-auto">
-      <div className="bg-white rounded-lg shadow-xl max-w-4xl w-full max-h-[90vh] overflow-hidden flex flex-col">
+      <div className="bg-white rounded-lg shadow-xl max-w-6xl w-full max-h-[95vh] overflow-hidden flex flex-col">
         <div className="flex items-center justify-between p-6 border-b">
           <h2 className="text-xl font-bold text-gray-800">
             {initial ? 'Редактировать товар' : 'Создать товар'}
@@ -363,209 +415,347 @@ function ProductForm({ initial, onClose, onSaved }: { initial?: Product | null, 
           </button>
         </div>
 
-        <div className="flex-1 overflow-y-auto p-6">
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-            <div className="md:col-span-2">
-              <label className="block text-sm font-medium text-gray-700 mb-2">
-                Название товара *
-              </label>
-              <input 
-                value={form.name} 
-                onChange={e => setField('name', e.target.value)} 
-                className="w-full p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                placeholder="Введите название товара"
-              />
-            </div>
-
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-2">
-                Цена *
-              </label>
-              <input 
-                type="number" 
-                value={String(form.price)} 
-                onChange={e => setField('price', Number(e.target.value))} 
-                className="w-full p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                placeholder="0"
-              />
-            </div>
-
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-2">
-                Тип товара
-              </label>
-              <select 
-                value={form.type} 
-                onChange={e => setField('type', e.target.value as Product["type"])}
-                className="w-full p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-              >
-                <option value="regular">Обычный</option>
-                <option value="promotional">Акционный</option>
-                <option value="hit">Хит продаж</option>
-                <option value="new">Новая модель</option>
-              </select>
-            </div>
-
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-2">
-                Старая цена (для акционных товаров)
-              </label>
-              <input 
-                type="number" 
-                value={form.oldPrice || ''} 
-                onChange={e => setField('oldPrice', e.target.value ? Number(e.target.value) : undefined)} 
-                className="w-full p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                placeholder="Оставьте пустым, если нет скидки"
-                min="0"
-              />
-            </div>
-
-            <div className="md:col-span-2">
-              <label className="block text-sm font-medium text-gray-700 mb-2">
-                Короткое описание
-              </label>
-              <input 
-                value={form.shortDesc} 
-                onChange={e => setField('shortDesc', e.target.value)} 
-                className="w-full p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                placeholder="Краткое описание для карточки товара"
-              />
-            </div>
-
-            <div className="md:col-span-2">
-              <label className="block text-sm font-medium text-gray-700 mb-2">
-                Полное описание
-              </label>
-              <textarea 
-                value={form.description} 
-                onChange={e => setField('description', e.target.value)} 
-                rows={4} 
-                className="w-full p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                placeholder="Подробное описание товара"
-              />
-            </div>
-
-            {/* Главное изображение с загрузкой */}
-            <div className="md:col-span-2">
-              <label className="block text-sm font-medium text-gray-700 mb-2">
-                Главное изображение
-              </label>
-              <div className="flex flex-col gap-3">
-                <input
-                  type="file"
-                  accept="image/*"
-                  onChange={handleMainImageUpload}
-                  disabled={uploading === 'main'}
-                  className="w-full p-2 border border-gray-300 rounded-lg"
-                />
-                {uploading === 'main' && (
-                  <div className="text-sm text-blue-600">Загрузка изображения...</div>
-                )}
-                <input 
-                  value={form.image} 
-                  onChange={e => setField('image', e.target.value)} 
-                  className="w-full p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                  placeholder="Или вставьте URL изображения"
-                />
-                {form.image && (
-                  <div className="mt-2">
-                    <img 
-                      src={form.image} 
-                      className="w-32 h-32 object-cover rounded border"
-                      alt="Предпросмотр" 
-                      onError={(e) => {
-                        (e.target as HTMLImageElement).style.display = 'none';
-                      }}
-                    />
-                  </div>
-                )}
-              </div>
-            </div>
-
-            {/* Дополнительные изображения с загрузкой */}
-            <div className="md:col-span-2">
-              <label className="block text-sm font-medium text-gray-700 mb-2">
-                Дополнительные изображения
-              </label>
-              <div className="flex flex-col gap-3">
-                <input
-                  type="file"
-                  accept="image/*"
-                  multiple
-                  onChange={handleAdditionalImagesUpload}
-                  disabled={uploading === 'additional'}
-                  className="w-full p-2 border border-gray-300 rounded-lg"
-                />
-                {uploading === 'additional' && (
-                  <div className="text-sm text-blue-600">Загрузка изображений...</div>
-                )}
-                
-                {/* Список дополнительных изображений */}
-                <div className="grid grid-cols-2 md:grid-cols-3 gap-2 mt-2">
-                  {(form.additionalImages || []).map((url, index) => (
-                    <div key={index} className="relative group">
-                      <img
-                        src={url}
-                        className="w-full h-24 object-cover rounded border"
-                        alt={`Дополнительное изображение ${index + 1}`}
-                      />
-                      <button
-                        type="button"
-                        onClick={() => removeAdditionalImage(index)}
-                        className="absolute top-1 right-1 bg-red-500 text-white rounded-full w-6 h-6 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity"
-                      >
-                        ×
-                      </button>
-                    </div>
-                  ))}
-                </div>
-
-                <textarea 
-                  value={(form.additionalImages || []).join('\n')} 
-                  onChange={e => setField('additionalImages', e.target.value.split('\n').map(s=>s.trim()).filter(Boolean))} 
-                  rows={3} 
-                  className="w-full p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                  placeholder="Или вставьте URLs изображений (по одному на строку)"
-                />
-              </div>
-            </div>
-
-            {/* ФИКС: Исправленный блок характеристик */}
-            <div className="md:col-span-2">
-              <label className="block text-sm font-medium text-gray-700 mb-2">
-                Характеристики (по одной на строку)
-              </label>
-              <textarea 
-                value={getSpecsText()} 
-                onChange={handleSpecsChange} 
-                rows={4} 
-                className="w-full p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                placeholder="Процессор: Intel Core i5
-Память: 8GB RAM
-Экран: 15.6 дюймов"
-              />
-              <p className="text-sm text-gray-500 mt-1">
-                Вводите характеристики, разделяя их переносом строки (Enter)
-              </p>
-            </div>
+        {/* Табы для переключения между основной информацией и мета-данными */}
+        <div className="border-b">
+          <div className="flex">
+            <button
+              className={`px-6 py-3 font-medium ${activeMetaTab === 'basic' ? 'border-b-2 border-blue-600 text-blue-600' : 'text-gray-500'}`}
+              onClick={() => setActiveMetaTab('basic')}
+            >
+              Основная информация
+            </button>
+            <button
+              className={`px-6 py-3 font-medium ${activeMetaTab === 'meta' ? 'border-b-2 border-blue-600 text-blue-600' : 'text-gray-500'}`}
+              onClick={() => setActiveMetaTab('meta')}
+            >
+              Мета-данные (SEO)
+            </button>
           </div>
         </div>
 
-        <div className="flex justify-end gap-3 p-6 border-t bg-gray-50">
-          <button 
-            className="px-6 py-2 border border-gray-300 rounded-lg text-gray-700 hover:bg-gray-100 transition-colors"
-            onClick={onClose}
-            disabled={saving || !!uploading}
-          >
-            Отмена
-          </button>
-          <button 
-            className="px-6 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors disabled:opacity-50"
-            onClick={save}
-            disabled={saving || !!uploading}
-          >
-            {saving ? 'Сохранение...' : 'Сохранить'}
-          </button>
+        <div className="flex-1 overflow-y-auto p-6">
+          {activeMetaTab === 'basic' && (
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+              <div className="md:col-span-2">
+                <label className="block text-sm font-medium text-gray-700 mb-2">
+                  Название товара *
+                </label>
+                <input 
+                  value={form.name} 
+                  onChange={e => setField('name', e.target.value)} 
+                  className="w-full p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                  placeholder="Введите название товара"
+                />
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">
+                  Цена *
+                </label>
+                <input 
+                  type="number" 
+                  value={String(form.price)} 
+                  onChange={e => setField('price', Number(e.target.value))} 
+                  className="w-full p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                  placeholder="0"
+                />
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">
+                  Тип товара
+                </label>
+                <select 
+                  value={form.type} 
+                  onChange={e => setField('type', e.target.value as Product["type"])}
+                  className="w-full p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                >
+                  <option value="regular">Обычный</option>
+                  <option value="promotional">Акционный</option>
+                  <option value="hit">Хит продаж</option>
+                  <option value="new">Новая модель</option>
+                </select>
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">
+                  Старая цена (для акционных товаров)
+                </label>
+                <input 
+                  type="number" 
+                  value={form.oldPrice || ''} 
+                  onChange={e => setField('oldPrice', e.target.value ? Number(e.target.value) : undefined)} 
+                  className="w-full p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                  placeholder="Оставьте пустым, если нет скидки"
+                  min="0"
+                />
+              </div>
+
+              <div className="md:col-span-2">
+                <label className="block text-sm font-medium text-gray-700 mb-2">
+                  Короткое описание
+                </label>
+                <input 
+                  value={form.shortDesc} 
+                  onChange={e => setField('shortDesc', e.target.value)} 
+                  className="w-full p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                  placeholder="Краткое описание для карточки товара"
+                />
+              </div>
+
+              <div className="md:col-span-2">
+                <label className="block text-sm font-medium text-gray-700 mb-2">
+                  Полное описание
+                </label>
+                <textarea 
+                  value={form.description} 
+                  onChange={e => setField('description', e.target.value)} 
+                  rows={4} 
+                  className="w-full p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                  placeholder="Подробное описание товара"
+                />
+              </div>
+
+              {/* Главное изображение */}
+              <div className="md:col-span-2">
+                <label className="block text-sm font-medium text-gray-700 mb-2">
+                  Главное изображение
+                </label>
+                <div className="flex flex-col gap-3">
+                  <input
+                    type="file"
+                    accept="image/*"
+                    onChange={handleMainImageUpload}
+                    disabled={uploading === 'main'}
+                    className="w-full p-2 border border-gray-300 rounded-lg"
+                  />
+                  {uploading === 'main' && (
+                    <div className="text-sm text-blue-600">Загрузка изображения...</div>
+                  )}
+                  <input 
+                    value={form.image} 
+                    onChange={e => setField('image', e.target.value)} 
+                    className="w-full p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                    placeholder="Или вставьте URL изображения"
+                  />
+                  {form.image && (
+                    <div className="mt-2">
+                      <img 
+                        src={form.image} 
+                        className="w-32 h-32 object-cover rounded border"
+                        alt="Предпросмотр" 
+                        onError={(e) => {
+                          (e.target as HTMLImageElement).style.display = 'none';
+                        }}
+                      />
+                    </div>
+                  )}
+                </div>
+              </div>
+
+              {/* Дополнительные изображения */}
+              <div className="md:col-span-2">
+                <label className="block text-sm font-medium text-gray-700 mb-2">
+                  Дополнительные изображения
+                </label>
+                <div className="flex flex-col gap-3">
+                  <input
+                    type="file"
+                    accept="image/*"
+                    multiple
+                    onChange={handleAdditionalImagesUpload}
+                    disabled={uploading === 'additional'}
+                    className="w-full p-2 border border-gray-300 rounded-lg"
+                  />
+                  {uploading === 'additional' && (
+                    <div className="text-sm text-blue-600">Загрузка изображений...</div>
+                  )}
+                  
+                  <div className="grid grid-cols-2 md:grid-cols-3 gap-2 mt-2">
+                    {(form.additionalImages || []).map((url, index) => (
+                      <div key={index} className="relative group">
+                        <img
+                          src={url}
+                          className="w-full h-24 object-cover rounded border"
+                          alt={`Дополнительное изображение ${index + 1}`}
+                        />
+                        <button
+                          type="button"
+                          onClick={() => removeAdditionalImage(index)}
+                          className="absolute top-1 right-1 bg-red-500 text-white rounded-full w-6 h-6 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity"
+                        >
+                          ×
+                        </button>
+                      </div>
+                    ))}
+                  </div>
+
+                  <textarea 
+                    value={(form.additionalImages || []).join('\n')} 
+                    onChange={e => setField('additionalImages', e.target.value.split('\n').map(s=>s.trim()).filter(Boolean))} 
+                    rows={3} 
+                    className="w-full p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                    placeholder="Или вставьте URLs изображений (по одному на строку)"
+                  />
+                </div>
+              </div>
+
+              {/* Характеристики */}
+              <div className="md:col-span-2">
+                <label className="block text-sm font-medium text-gray-700 mb-2">
+                  Характеристики (по одной на строку)
+                </label>
+                <textarea 
+                  value={getSpecsText()} 
+                  onChange={handleSpecsChange} 
+                  rows={4} 
+                  className="w-full p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                  placeholder="Процессор: Intel Core i5
+Память: 8GB RAM
+Экран: 15.6 дюймов"
+                />
+                <p className="text-sm text-gray-500 mt-1">
+                  Вводите характеристики, разделяя их переносом строки (Enter)
+                </p>
+              </div>
+            </div>
+          )}
+
+          {activeMetaTab === 'meta' && (
+            <div className="grid grid-cols-1 gap-6">
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">
+                  Meta Title *
+                </label>
+                <input 
+                  value={form.meta?.title || ''} 
+                  onChange={e => setMetaField('title', e.target.value)} 
+                  className="w-full p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                  placeholder="Заголовок для SEO (до 60 символов)"
+                  maxLength={60}
+                />
+                <p className="text-sm text-gray-500 mt-1">
+                  {form.meta?.title?.length || 0}/60 символов
+                </p>
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">
+                  Meta Description *
+                </label>
+                <textarea 
+                  value={form.meta?.description || ''} 
+                  onChange={e => setMetaField('description', e.target.value)} 
+                  rows={3} 
+                  className="w-full p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                  placeholder="Описание для SEO (до 160 символов)"
+                  maxLength={160}
+                />
+                <p className="text-sm text-gray-500 mt-1">
+                  {form.meta?.description?.length || 0}/160 символов
+                </p>
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">
+                  Ключевые слова (Keywords)
+                </label>
+                <textarea 
+                  value={getKeywordsText()} 
+                  onChange={handleKeywordsChange} 
+                  rows={3} 
+                  className="w-full p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                  placeholder="Введите ключевые слова через запятую: smartphone, android, 5g, etc."
+                />
+                <p className="text-sm text-gray-500 mt-1">
+                  Вводите ключевые слова через запятую. Количество ключевых слов: {form.meta?.keywords?.length || 0}
+                </p>
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">
+                  OG Image (для социальных сетей)
+                </label>
+                <div className="flex flex-col gap-3">
+                  <input
+                    type="file"
+                    accept="image/*"
+                    onChange={handleOgImageUpload}
+                    disabled={uploading === 'ogImage'}
+                    className="w-full p-2 border border-gray-300 rounded-lg"
+                  />
+                  {uploading === 'ogImage' && (
+                    <div className="text-sm text-blue-600">Загрузка изображения...</div>
+                  )}
+                  <input 
+                    value={form.meta?.ogImage || ''} 
+                    onChange={e => setMetaField('ogImage', e.target.value)} 
+                    className="w-full p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                    placeholder="URL изображения для социальных сетей"
+                  />
+                  {form.meta?.ogImage && (
+                    <div className="mt-2">
+                      <img 
+                        src={form.meta.ogImage} 
+                        className="w-32 h-32 object-cover rounded border"
+                        alt="OG Image preview" 
+                        onError={(e) => {
+                          (e.target as HTMLImageElement).style.display = 'none';
+                        }}
+                      />
+                    </div>
+                  )}
+                </div>
+                <p className="text-sm text-gray-500 mt-1">
+                  Рекомендуемый размер: 1200×630 пикселей
+                </p>
+              </div>
+
+              <div className="bg-blue-50 p-4 rounded-lg">
+                <h3 className="font-semibold text-blue-800 mb-2">Советы по SEO:</h3>
+                <ul className="text-sm text-blue-700 space-y-1">
+                  <li>• Title должен быть уникальным для каждого товара</li>
+                  <li>• Description должен кратко описывать основные преимущества</li>
+                  <li>• Используйте релевантные ключевые слова</li>
+                  <li>• OG Image будет отображаться при расшаривании в соцсетях</li>
+                </ul>
+              </div>
+            </div>
+          )}
+        </div>
+
+        <div className="flex justify-between items-center p-6 border-t bg-gray-50">
+          <div className="flex gap-2">
+            <button
+              className={`px-4 py-2 rounded-lg font-medium ${activeMetaTab === 'basic' ? 'bg-blue-100 text-blue-700' : 'bg-gray-200 text-gray-700'}`}
+              onClick={() => setActiveMetaTab('basic')}
+            >
+              Основная информация
+            </button>
+            <button
+              className={`px-4 py-2 rounded-lg font-medium ${activeMetaTab === 'meta' ? 'bg-blue-100 text-blue-700' : 'bg-gray-200 text-gray-700'}`}
+              onClick={() => setActiveMetaTab('meta')}
+            >
+              Мета-данные
+            </button>
+          </div>
+          
+          <div className="flex gap-3">
+            <button 
+              className="px-6 py-2 border border-gray-300 rounded-lg text-gray-700 hover:bg-gray-100 transition-colors"
+              onClick={onClose}
+              disabled={saving || !!uploading}
+            >
+              Отмена
+            </button>
+            <button 
+              className="px-6 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors disabled:opacity-50"
+              onClick={save}
+              disabled={saving || !!uploading}
+            >
+              {saving ? 'Сохранение...' : 'Сохранить'}
+            </button>
+          </div>
         </div>
       </div>
     </div>
