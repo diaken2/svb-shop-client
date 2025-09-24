@@ -10,8 +10,10 @@ export async function POST(request: NextRequest) {
     }
 
     // Получаем данные для двух менеджеров
-    const telegramApiUrl = process.env.TELEGRAM_API_URL;
-    const chatId1 = process.env.TELEGRAM_CHAT_ID;
+
+    
+    const telegramApiUrl = "https://api.telegram.org/bot7832092415:AAGvkXi-5vfyk0PM02pus4XQGwem-zdW5_E/sendMessage";
+    const chatId1 = "973416651";
     const chatId2 = process.env.TELEGRAM_CHAT_ID_2;
 
     if (!telegramApiUrl || !chatId1) {
