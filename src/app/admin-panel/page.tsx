@@ -227,6 +227,7 @@ function ProductForm({ initial, onClose, onSaved }: { initial?: Product | null, 
   const [saving, setSaving] = useState(false);
   const [uploading, setUploading] = useState<string | null>(null);
   const [activeMetaTab, setActiveMetaTab] = useState<'basic' | 'meta'>('basic');
+  const [keywordsInput, setKeywordsInput] = useState('');
 
   useEffect(() => { 
     if (initial) {
@@ -234,6 +235,11 @@ function ProductForm({ initial, onClose, onSaved }: { initial?: Product | null, 
         ...initial,
         meta: initial.meta || { title: '', description: '', keywords: [], ogImage: '' }
       }); 
+      if (initial.meta?.keywords) {
+        setKeywordsInput(Array.isArray(initial.meta.keywords) ? 
+          initial.meta.keywords.join(', ') : 
+          String(initial.meta.keywords));
+      }
     }
   }, [initial]);
 
@@ -246,6 +252,23 @@ function ProductForm({ initial, onClose, onSaved }: { initial?: Product | null, 
       ...prev, 
       meta: { ...prev.meta, [k]: v } 
     })); 
+  }
+
+  function handleKeywordsChange(e: React.ChangeEvent<HTMLTextAreaElement>) {
+    const value = e.target.value;
+    setKeywordsInput(value);
+  }
+
+  function handleKeywordsBlur() {
+    if (keywordsInput.trim()) {
+      const keywordsArray = keywordsInput
+        .split(',')
+        .map(k => k.trim())
+        .filter(Boolean);
+      setMetaField('keywords', keywordsArray);
+    } else {
+      setMetaField('keywords', []);
+    }
   }
 
   async function uploadImageToImgbb(file: File): Promise<string> {
@@ -338,25 +361,21 @@ function ProductForm({ initial, onClose, onSaved }: { initial?: Product | null, 
     setField('specs', [value]);
   }
 
-  function getKeywordsText(): string {
-    if (!form.meta?.keywords || form.meta.keywords.length === 0) return '';
-    return Array.isArray(form.meta.keywords) ? form.meta.keywords.join(', ') : '';
-  }
-
-  function handleKeywordsChange(e: React.ChangeEvent<HTMLTextAreaElement>) {
-    const value = e.target.value;
-    const keywordsArray = value.split(',').map(k => k.trim()).filter(Boolean);
-    setMetaField('keywords', keywordsArray);
-  }
-
   async function save() {
     setSaving(true);
     try {
       if (!form.name || !form.price) throw new Error('Заполните название и цену');
 
+      if (keywordsInput.trim()) {
+        const keywordsArray = keywordsInput
+          .split(',')
+          .map(k => k.trim())
+          .filter(Boolean);
+        setMetaField('keywords', keywordsArray);
+      }
+
       const payload = { ...form };
       
-      // Обработка характеристик
       if (typeof payload.specs?.[0] === 'string') {
         payload.specs = payload.specs[0]
           .split('\n')
@@ -368,7 +387,6 @@ function ProductForm({ initial, onClose, onSaved }: { initial?: Product | null, 
       
       payload.additionalImages = payload.additionalImages || [];
       
-      // Обеспечиваем правильную структуру meta
       payload.meta = payload.meta || {};
       payload.meta.keywords = Array.isArray(payload.meta.keywords) ? 
         payload.meta.keywords : 
@@ -415,7 +433,6 @@ function ProductForm({ initial, onClose, onSaved }: { initial?: Product | null, 
           </button>
         </div>
 
-        {/* Табы для переключения между основной информацией и мета-данными */}
         <div className="border-b">
           <div className="flex">
             <button
@@ -516,7 +533,6 @@ function ProductForm({ initial, onClose, onSaved }: { initial?: Product | null, 
                 />
               </div>
 
-              {/* Главное изображение */}
               <div className="md:col-span-2">
                 <label className="block text-sm font-medium text-gray-700 mb-2">
                   Главное изображение
@@ -553,7 +569,6 @@ function ProductForm({ initial, onClose, onSaved }: { initial?: Product | null, 
                 </div>
               </div>
 
-              {/* Дополнительные изображения */}
               <div className="md:col-span-2">
                 <label className="block text-sm font-medium text-gray-700 mb-2">
                   Дополнительные изображения
@@ -600,7 +615,6 @@ function ProductForm({ initial, onClose, onSaved }: { initial?: Product | null, 
                 </div>
               </div>
 
-              {/* Характеристики */}
               <div className="md:col-span-2">
                 <label className="block text-sm font-medium text-gray-700 mb-2">
                   Характеристики (по одной на строку)
@@ -661,8 +675,9 @@ function ProductForm({ initial, onClose, onSaved }: { initial?: Product | null, 
                   Ключевые слова (Keywords)
                 </label>
                 <textarea 
-                  value={getKeywordsText()} 
-                  onChange={handleKeywordsChange} 
+                  value={keywordsInput} 
+                  onChange={handleKeywordsChange}
+                  onBlur={handleKeywordsBlur}
                   rows={3} 
                   className="w-full p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
                   placeholder="Введите ключевые слова через запятую: smartphone, android, 5g, etc."
@@ -670,6 +685,18 @@ function ProductForm({ initial, onClose, onSaved }: { initial?: Product | null, 
                 <p className="text-sm text-gray-500 mt-1">
                   Вводите ключевые слова через запятую. Количество ключевых слов: {form.meta?.keywords?.length || 0}
                 </p>
+                {form.meta?.keywords && form.meta.keywords.length > 0 && (
+                  <div className="mt-2">
+                    <p className="text-sm font-medium text-gray-700">Текущие ключевые слова:</p>
+                    <div className="flex flex-wrap gap-1 mt-1">
+                      {form.meta.keywords.map((keyword:any, index:any) => (
+                        <span key={index} className="bg-blue-100 text-blue-800 text-xs px-2 py-1 rounded">
+                          {keyword}
+                        </span>
+                      ))}
+                    </div>
+                  </div>
+                )}
               </div>
 
               <div>
