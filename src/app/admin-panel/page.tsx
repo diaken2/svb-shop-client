@@ -37,11 +37,117 @@ type Order = {
 };
 
 const IMGBB_API_KEY = '92883bc6a0d75c6e035cc333384bcdae';
+const ADMIN_CREDENTIALS = {
+  login: 'admin',
+  password: 'svb123'
+};
 
 export default function AdminPanelPage() {
-  const [activeTab, setActiveTab] = useState<'products'>('products'); // Убрали заказы
+  const [isAuthenticated, setIsAuthenticated] = useState(false);
+  const [login, setLogin] = useState('');
+  const [password, setPassword] = useState('');
+  const [authError, setAuthError] = useState('');
 
-  // Состояния для товаров
+  const handleLogin = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (login === ADMIN_CREDENTIALS.login && password === ADMIN_CREDENTIALS.password) {
+      setIsAuthenticated(true);
+      setAuthError('');
+      // Сохраняем в sessionStorage на время сессии
+      sessionStorage.setItem('adminAuthenticated', 'true');
+    } else {
+      setAuthError('Неверный логин или пароль');
+    }
+  };
+
+  // Проверяем аутентификацию при загрузке
+  useEffect(() => {
+    const savedAuth = sessionStorage.getItem('adminAuthenticated');
+    if (savedAuth === 'true') {
+      setIsAuthenticated(true);
+    }
+  }, []);
+
+  const handleLogout = () => {
+    setIsAuthenticated(false);
+    sessionStorage.removeItem('adminAuthenticated');
+    setLogin('');
+    setPassword('');
+  };
+
+  // Если не аутентифицирован, показываем форму входа
+  if (!isAuthenticated) {
+    return (
+      <div className="min-h-screen bg-gray-50 flex items-center justify-center p-4">
+        <div className="max-w-md w-full bg-white rounded-lg shadow-md p-6">
+          <div className="text-center mb-6">
+            <h1 className="text-2xl font-bold text-gray-800">Админ-панель SVB-SHOP</h1>
+            <p className="text-gray-600 mt-2">Введите данные для входа</p>
+          </div>
+          
+          <form onSubmit={handleLogin} className="space-y-4">
+            <div>
+              <label htmlFor="login" className="block text-sm font-medium text-gray-700 mb-1">
+                Логин
+              </label>
+              <input
+                id="login"
+                type="text"
+                value={login}
+                onChange={(e) => setLogin(e.target.value)}
+                className="w-full p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                placeholder="Введите логин"
+                required
+              />
+            </div>
+            
+            <div>
+              <label htmlFor="password" className="block text-sm font-medium text-gray-700 mb-1">
+                Пароль
+              </label>
+              <input
+                id="password"
+                type="password"
+                value={password}
+                onChange={(e) => setPassword(e.target.value)}
+                className="w-full p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                placeholder="Введите пароль"
+                required
+              />
+            </div>
+            
+            {authError && (
+              <div className="bg-red-100 border border-red-400 text-red-700 px-4 py-3 rounded">
+                {authError}
+              </div>
+            )}
+            
+            <button
+              type="submit"
+              className="w-full bg-blue-600 text-white py-3 rounded-lg hover:bg-blue-700 transition-colors font-medium"
+            >
+              Войти
+            </button>
+          </form>
+          
+          <div className="mt-6 p-4 bg-gray-50 rounded-lg">
+            <p className="text-sm text-gray-600 text-center">
+              Для доступа к админ-панели используйте:<br />
+              <strong>Логин: admin</strong><br />
+              <strong>Пароль: svb123</strong>
+            </p>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  // Основной контент админ-панели (ваш существующий код)
+  return <AdminPanelContent onLogout={handleLogout} />;
+}
+
+function AdminPanelContent({ onLogout }: { onLogout: () => void }) {
+  const [activeTab, setActiveTab] = useState<'products'>('products');
   const [items, setItems] = useState<Product[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
@@ -97,8 +203,19 @@ export default function AdminPanelPage() {
     <div className="min-h-screen bg-gray-50 p-4 md:p-6">
       <div className="max-w-7xl mx-auto">
         <header className="mb-6">
-          <h1 className="text-2xl font-bold text-gray-800 mb-4">Админ-панель</h1>
-          <div className="flex border-b">
+          <div className="flex justify-between items-center">
+            <div>
+              <h1 className="text-2xl font-bold text-gray-800 mb-1">Админ-панель SVB-SHOP</h1>
+              <p className="text-gray-600">Управление товарами магазина</p>
+            </div>
+            <button 
+              onClick={onLogout}
+              className="px-4 py-2 bg-red-600 text-white rounded-md hover:bg-red-700 transition-colors"
+            >
+              Выйти
+            </button>
+          </div>
+          <div className="flex border-b mt-4">
             <button
               className={`pb-2 px-4 border-b-2 border-blue-600 text-blue-600`}
             >
@@ -214,6 +331,7 @@ export default function AdminPanelPage() {
   );
 }
 
+// ProductForm компонент остается без изменений
 function ProductForm({ initial, onClose, onSaved }: { initial?: Product | null, onClose: () => void, onSaved: (p: Product) => void }) {
   const [form, setForm] = useState<Product>(() => initial ? { 
     ...initial,
