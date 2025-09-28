@@ -13,7 +13,7 @@ export async function POST(request: NextRequest) {
 
     
     const telegramApiUrl = "https://api.telegram.org/bot7832092415:AAGvkXi-5vfyk0PM02pus4XQGwem-zdW5_E/sendMessage";
-    const chatId1 = "973416651";
+    const chatId1 = "801433497";
     const chatId2 = process.env.TELEGRAM_CHAT_ID_2;
 
     if (!telegramApiUrl || !chatId1) {
